@@ -1,0 +1,19 @@
+data/
+*.json
+*.parquet
+*.zip
+*.log
+
+__pycashe__/
+*.pyc
+*.pid
+
+.idea/
+
+# Airflow metadata
+airflow.db
+airflow.cfg
+airflow-webserver.pid
+standalone_admin_password.txt
+webserver_config.py
+logs/

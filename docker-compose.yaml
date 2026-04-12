@@ -1,0 +1,27 @@
+version: '3'
+
+services:
+
+  spark-app:
+    build: .
+    container_name: spark-app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    command: ["sleep", "infinity"]
+
+  airflow:
+    image: apache/airflow:2.9.0
+    container_name: airflow
+    depends_on:
+      - spark-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    command: standalone
