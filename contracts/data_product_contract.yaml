@@ -1,0 +1,183 @@
+product:
+  name: Yelp Business Review Metrics
+  version: 1.0.0
+  owner: Arkadiusz Olejniczak
+  contact: olejniczak.arkadiusz@gmail.com
+  domain: Reviews Analytics
+  git_repository: https://github.com/ArtiItIs/Big-Data-Orchestration-Yelp-Reviews
+  description: >
+    Yelp Business Review Metrics is a curated data product created from the
+    Yelp Academic Dataset from Kaggle https://www.kaggle.com/datasets/yelp-dataset/yelp-dataset. 
+    It provides business-level review metrics such as
+    average star rating and number of reviews per business.
+
+purpose:
+  description: >
+    The purpose of this data product is to help users analyze Yelp businesses
+    based on customer review activity and rating performance.
+  use_cases:
+    - Identify businesses with the highest number of reviews.
+    - Compare average ratings between businesses.
+    - Build simple business ranking or recommendation reports.
+    - Use aggregated review metrics as input for analytical dashboards.
+    - Support exploratory data analysis on Yelp review behavior.
+
+sources:
+  - name: Yelp Academic Dataset - Review
+    type: JSON
+    location: data/raw/yelp_academic_dataset_review.json
+    description: >
+      Raw Yelp review dataset containing user reviews, star ratings,
+      business identifiers, review identifiers, vote counts and timestamps.
+    ingestion_method: >
+      The source JSON file is read by a Kafka producer triggered by Airflow.
+      Records are sent to a Kafka topic and then consumed into the landing zone.
+
+pipeline:
+  orchestration: Apache Airflow
+  processing_engine: Apache Spark / PySpark
+  queue_system: Apache Kafka
+  containerization: Docker / Docker Compose
+  architecture: Medallion Architecture
+  flow:
+    - Raw Yelp JSON
+    - Kafka Producer
+    - Kafka Topic: yelp_reviews_raw
+    - Kafka Consumer
+    - Landing Zone
+    - Bronze Layer
+    - Silver Layer
+    - Gold Layer
+    - Data Quality Metrics
+
+datasets:
+  landing:
+    name: yelp_reviews_landing
+    format: JSONL
+    location: data/landing/reviews_from_kafka.jsonl
+    description: >
+      Data consumed from Kafka and stored as JSON lines before Spark processing.
+
+  bronze:
+    name: yelp_reviews_bronze
+    format: Parquet
+    location: data/bronze
+    description: >
+      Raw Yelp review data converted from JSONL to Parquet format.
+
+  silver:
+    name: yelp_reviews_silver
+    format: Parquet
+    location: data/silver
+    description: >
+      Cleaned and typed review-level data containing selected columns used
+      for analytical aggregation.
+
+  gold:
+    name: gold_business_review_metrics
+    format: Parquet
+    location: data/gold
+    description: >
+      Final business-level data product containing average star rating and
+      review count per business.
+
+output:
+  dataset_name: gold_business_review_metrics
+  format: Parquet
+  location: data/gold
+  refresh_frequency: Every successful Airflow DAG run
+  access_method: >
+    The dataset is available as Parquet files in the data/gold directory
+    after a successful execution of the Airflow DAG named yelp_medallion_pipeline.
+
+schema:
+  - name: business_id
+    type: string
+    nullable: false
+    description: Unique identifier of a Yelp business.
+
+  - name: avg_stars
+    type: double
+    nullable: false
+    description: Average star rating calculated from all available reviews for the business.
+
+  - name: review_count
+    type: long
+    nullable: false
+    description: Number of reviews available for the business.
+
+quality_metrics:
+  - name: Bronze row count
+    definition: Number of records available in the Bronze layer.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "> 0"
+    update_cadence: Every pipeline run
+
+  - name: Bronze review_id uniqueness
+    definition: Percentage of unique review_id values among non-null review_id records in Bronze.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "> 99.5%"
+    update_cadence: Every pipeline run
+
+  - name: Silver business_id completeness
+    definition: Percentage of rows in Silver where business_id is not null.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "> 99%"
+    update_cadence: Every pipeline run
+
+  - name: Silver stars validity
+    definition: Percentage of rows in Silver where stars value is between 1 and 5.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "100%"
+    update_cadence: Every pipeline run
+
+  - name: Gold avg_stars validity
+    definition: Percentage of rows in Gold where avg_stars value is between 1 and 5.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "100%"
+    update_cadence: Every pipeline run
+
+  - name: Gold row count
+    definition: Number of business-level records available in the Gold layer.
+    current_value_location: data/quality/data_quality_metrics.json
+    expected_threshold: "> 0"
+    update_cadence: Every pipeline run
+
+known_limitations:
+  - The product is based only on the Yelp review dataset.
+  - Business metadata such as city, state, category and location is not included.
+  - User metadata is not included.
+  - Review text is not analyzed in the current Gold layer.
+  - Sentiment analysis is not included.
+  - The pipeline is batch-oriented, not real-time.
+  - The raw Yelp dataset is not stored in Git because of its size.
+  - The product uses local Docker volumes and local files, not cloud storage.
+
+example_usage:
+  pyspark: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder \
+        .appName("Read Yelp Business Review Metrics") \
+        .getOrCreate()
+
+    df = spark.read.parquet("data/gold")
+
+    df.orderBy("review_count", ascending=False).show(10)
+
+  python_pandas: |
+    import pandas as pd
+
+    df = pd.read_parquet("data/gold")
+
+    top_businesses = df.sort_values("review_count", ascending=False).head(10)
+
+    print(top_businesses)
+
+operational_notes:
+  airflow_dag: yelp_medallion_pipeline
+  quality_output: data/quality/data_quality_metrics.json
+  pipeline_entrypoints:
+    queue_ingestion: spark_jobs/yelp_queue_ingestion.py
+    medallion_pipeline: spark_jobs/yelp_medallion_pipeline.py
+    data_quality: spark_jobs/yelp_data_quality.py

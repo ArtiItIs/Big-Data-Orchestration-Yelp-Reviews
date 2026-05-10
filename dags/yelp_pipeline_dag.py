@@ -40,4 +40,9 @@ with DAG(
         bash_command="docker exec spark-app python3 /app/spark_jobs/yelp_medallion_pipeline.py gold"
     )
 
-    inject_raw_to_kafka >> consume_kafka_to_landing >> bronze >> silver >> gold
+    data_quality = BashOperator(
+        task_id="data_quality_checks",
+        bash_command="docker exec spark-app python3 /app/spark_jobs/yelp_data_quality.py"
+    )
+
+    inject_raw_to_kafka >> consume_kafka_to_landing >> bronze >> silver >> gold >> data_quality
