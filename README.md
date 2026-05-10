@@ -1,26 +1,163 @@
 # Yelp Big Data Orchestration Project Pipeline
 
-End-to-end **data engineering pipeline** built using **Apache Spark**, **Apache Airflow**, and Docker.  
-The project demonstrates a modern **medallion architecture (Bronze → Silver → Gold)** applied to large-scale Yelp dataset processing.
+End-to-end **data engineering pipeline** built using **Apache Spark**, **Apache Airflow**, **Apache Kafka**, and Docker.
+
+The project demonstrates a modern **Big Data pipeline** based on the **medallion architecture**:
+
+```text
+Landing → Bronze → Silver → Gold
+```
+The pipeline processes the Yelp Academic Dataset from Kaggle, specifically the file:
+_yelp_academic_dataset_review.json_
+
+The project is fully containerized and orchestrated with Apache Airflow.
 
 ### Architecture
 
-The system is orchestrated using Apache Airflow and processes data using Spark in a Dockerized environment.
-```
-graph
-A[Yelp Dataset] --> B[Airflow DAG]
-B --> C[Spark Job]
-C --> D[Bronze Layer]
-D --> E[Silver Layer]
-E --> F[Gold Layer]
+The system is orchestrated using Apache Airflow and processes data using Apache Spark in a Dockerized environment.
+
+The newest version of the project includes Apache Kafka as a queue/message broker between the raw data source and the Spark medallion pipeline.
+```mermaid
+flowchart LR
+    A[Source: Yelp Review JSON] --> B[Airflow DAG Trigger]
+
+    B --> C[Kafka Producer]
+    C --> D[(Kafka Topic: yelp_reviews_raw)]
+    D --> E[Kafka Consumer]
+
+    E --> F[Landing Zone: JSONL]
+    F --> G[Bronze Layer: Parquet]
+    G --> H[Silver Layer: Cleaned Data]
+    H --> I[Gold Layer: Aggregated Metrics]
+
+    J[Docker Compose] --> B
+    J --> C
+    J --> D
+    J --> E
+    J --> G
 ```
 
+Current data flow:
+```text
+Yelp JSON --> Kafka Producer --> Kafka Topic --> Kafka Consumer --> Landing Zone --> Bronze Layer --> Silver Layer --> Gold Layer
+```
+This design separates data ingestion from data transformation and makes the pipeline closer to real-world event-driven Big Data architectures.
+
 ### Tech Stack
-- Apache Spark (PySpark)
+- Apache Spark / PySpark
 - Apache Airflow
-- Docker
+- Apache Kafka
+- Docker / Docker Compose
 - Python
-- Yelp Dataset (JSON ~GB scale)
+- Yelp Academic Dataset
+- Parquet
+- JSON / JSONL
+
+### Pipeline description
+The pipeline is executed by Apache Airflow and consists of the following stages:
+
+```text
+inject_raw_to_kafka --> consume_kafka_to_landing --> bronze_layer --> silver_layer -->gold_layer
+```
+
+## Queue-Based Ingestion
+
+The project includes Apache Kafka as a queue system used while moving data from the raw source into the processing pipeline.
+
+### Kafka Producer
+The producer reads the source file:
+_data/raw/yelp_academic_dataset_review.json_
+and sends every review as a separate message to a Kafka topic.
+
+Main script:
+_spark_jobs/yelp_queue_ingestion.py_
+
+Producer mode:
+_python3 /app/spark_jobs/yelp_queue_ingestion.py produce <run_id>_
+
+### Kafka Topic
+The messages are sent to the Kafka topic:
+
+**yelp_reviews_raw**
+
+Kafka acts as a queue/message broker between the source file and the next stage of the pipeline.
+
+### Kafka Consumer
+
+The consumer reads messages from the Kafka topic and writes them into the landing zone:
+
+_data/landing/reviews_from_kafka.jsonl_
+
+Consumer mode:
+
+**_python3 /app/spark_jobs/yelp_queue_ingestion.py consume <run_id>_**
+
+The run_id is passed from Airflow, which allows each pipeline run to process only messages related to the current DAG execution.
+
+### Landing Zone
+
+The landing zone stores data consumed from Kafka before it is processed by Spark.
+
+Output file:
+_data/landing/reviews_from_kafka.jsonl_
+
+This file becomes the input for the Bronze layer.
+
+### Bronze Layer
+
+The Bronze layer reads data from the landing zone:
+_data/landing/reviews_from_kafka.jsonl_
+
+and saves it in Parquet format:
+**data/bronze**
+
+The Bronze layer represents raw ingested data in an optimized columnar format.
+
+Main actions:
+
+- Read JSONL data from landing zone
+- Optional deduplication by review_id
+- Save data as Parquet
+
+### Silver Layer
+
+The Silver layer reads data from Bronze and performs basic cleaning and standardization.
+
+Main actions:
+
+- Select relevant columns
+- Cast data types
+- Filter invalid rows
+- Save cleaned data as Parquet
+
+Selected columns example:
+
+- business_id
+- stars
+- useful
+- funny
+- cool
+
+Output path:
+**data/silver**
+
+### Gold Layer
+
+The Gold layer reads data from Silver and creates analytical aggregations.
+
+Main metrics:
+
+- Average rating per business
+- Review count per business
+
+Output path:
+**data/gold**
+
+Example output columns:
+
+- business_id
+- avg_stars
+- review_count
 
 ### How to run
 
@@ -37,28 +174,32 @@ Choose 'yelp_medallion_pipeline' in the DAGs on the Airflow site
 
 Press Trigger DAG
 
-Pipeline Description
+Airflow will automatically run the whole pipeline:
 
-### Bronze Layer
+Raw Yelp JSON --> Kafka --> Landing --> Bronze --> Silver --> Gold
 
-- Raw ingestion of Yelp JSON
-- Converted to Parquet format
+## Idempotency
 
-### Silver Layer
+The pipeline is designed to be rerunnable.
 
-- Data cleaning
-- Type casting
-- Filtering invalid rows
+Current approach:
 
-### Gold Layer
+- Airflow triggers each stage in a controlled order.
+- Kafka messages are tagged with a run_id.
+- The consumer processes messages only for the current Airflow run.
+- The landing file is written through a temporary file and then replaced.
+- Spark layers are saved using overwrite mode.
 
-- Aggregated business metrics
-- Average ratings per business
-- Review counts
+This makes repeated runs predictable during development and testing.
 
 ### Key Concepts Demonstrated
-- Orchestration
-- Distributed data processing
+- Workflow orchestration with Apache Airflow
+- Queue-based ingestion with Apache Kafka
+- Distributed data processing with Apache Spark
+- Dockerized Big Data environment
 - Medallion architecture
-- Containerization
-- Batch processing pipelines
+- Batch data processing
+- Automated data injection from source
+- Separation of ingestion and transformation
+- Idempotent pipeline execution
+- Parquet-based analytical storage

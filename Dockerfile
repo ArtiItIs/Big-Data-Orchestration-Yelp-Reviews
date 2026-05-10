@@ -4,7 +4,7 @@ USER root
 
 RUN apt-get update && apt-get install -y python3-pip
 
-RUN pip3 install pyspark pandas pyarrow
+RUN pip3 install pyspark pandas pyarrow kafka-python
 
 WORKDIR /app
 

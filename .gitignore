@@ -1,19 +1,57 @@
-data/
+# Data directories - keep folder structure, ignore actual data
+data/*
+!data/.gitkeep
+!data/raw/
+!data/raw/.gitkeep
+!data/landing/
+!data/landing/.gitkeep
+!data/bronze/
+!data/bronze/.gitkeep
+!data/silver/
+!data/silver/.gitkeep
+!data/gold/
+!data/gold/.gitkeep
+
+# Data files
 *.json
+*.jsonl
 *.parquet
 *.zip
+*.csv
+*.crc
+_SUCCESS
+
+# Logs
+logs/
 *.log
 
-__pycashe__/
-*.pyc
-*.pid
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
 
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
 .idea/
+.vscode/
 
-# Airflow metadata
+# Airflow local metadata and generated files
 airflow.db
 airflow.cfg
 airflow-webserver.pid
 standalone_admin_password.txt
 webserver_config.py
-logs/
+
+# Docker / local environment
+.env
+*.pid
+
+# OS-specific files
+.DS_Store
+Thumbs.db

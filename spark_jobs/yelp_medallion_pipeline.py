@@ -14,7 +14,7 @@ def main():
 
     stage = sys.argv[1] if len(sys.argv) > 1 else "all"
 
-    raw_path = "file:///app/data/raw/yelp_academic_dataset_review.json"
+    raw_path = "file:///app/data/landing/reviews_from_kafka.jsonl"
 
     bronze_path = "file:///app/data/bronze"
     silver_path = "file:///app/data/silver"
@@ -25,6 +25,9 @@ def main():
         print("Running BRONZE layer...")
 
         bronze_df = spark.read.json(raw_path)
+
+        if "review_id" in bronze_df.columns:
+            bronze_df = bronze_df.dropDuplicates(["review_id"])
 
         bronze_df.write.mode("overwrite").parquet(bronze_path)
 
